@@ -46,10 +46,13 @@ def main(env="envs.countdown:Countdown", model="Qwen/Qwen3-0.6B", steps=200, tas
         print(f"eval step {step:4d}  held-out solved {solved}/{n} ({solved / n:.1%})  "
               f"format ok {fmt}/{n} ({fmt / n:.1%})", flush=True)
         print("sample:", tok.decode(trajs[0].tokens)[-400:], flush=True)
+        return solved
 
+    best = -1
     for step in range(steps):
-        if step % eval_every == 0:
-            evaluate(step)
+        if step % eval_every == 0 and (solved := evaluate(step)) > best:
+            best = solved  # RL can overtrain, so keep the peak, not just the end
+            net.save_pretrained(f"{out}/best")
         t0 = time.time()
         tasks = [Env.sample_task(rng) for _ in range(tasks_per_step)]
         net.eval()
@@ -69,7 +72,8 @@ def main(env="envs.countdown:Countdown", model="Qwen/Qwen3-0.6B", steps=200, tas
         rewards = [t.reward for t in trajs]
         print(f"step {step:4d}  reward {sum(rewards) / len(rewards):.3f}  "
               f"solved {sum(r == 1 for r in rewards)}/{len(rewards)}  {time.time() - t0:.0f}s", flush=True)
-    evaluate(steps)
+    if evaluate(steps) > best:
+        net.save_pretrained(f"{out}/best")
     net.save_pretrained(out)
 
 
