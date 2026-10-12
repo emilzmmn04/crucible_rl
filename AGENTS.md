@@ -55,6 +55,13 @@ environments with verifiable rewards (GRPO + LoRA). Goals, in order:
 9. **Commits** are small and use imperative messages, e.g. `add held-out eval`. One idea per commit.
 10. **Keep this file current.** Update the Layout and Status sections whenever you change them.
 
+## Versions and branches
+
+- `main` holds released versions only. Each finished milestone gets a tag: M0 = `v0.1`, M1 = `v0.2`,
+  M2 = `v0.3`, and so on. `v1.0` comes when every milestone on the roadmap is done.
+- Work for the next milestone happens on a branch named after its version (currently `v0.2` for M1),
+  and is merged into `main` and tagged when the milestone is done.
+
 ## Invariants (do not break)
 
 - **Token-exact trajectories.** Never re-tokenize model output. Env text is appended
