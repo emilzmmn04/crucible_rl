@@ -55,6 +55,6 @@ class Countdown(Env):
                 f"reach {task['target']}. Reply with only the expression inside <answer></answer>.")
 
     async def step(self, action):
-        m = re.search(r"<answer>(.*?)</answer>", action, re.S)
-        reward, feedback = score(m.group(1), **self.task) if m else (0.0, "Missing <answer> tags.")
+        answers = re.findall(r"<answer>(.*?)</answer>", action, re.S)  # the last one is final
+        reward, feedback = score(answers[-1], **self.task) if answers else (0.0, "Missing <answer> tags.")
         return Step(observation=feedback + " Try again.", reward=reward, done=reward == 1.0)

@@ -18,7 +18,7 @@ def load_env(spec: str):
 
 
 def main(env="envs.countdown:Countdown", model="Qwen/Qwen3-0.6B", steps=200, tasks_per_step=8,
-         group_size=8, lr=1e-4, lora_rank=32, max_new_tokens=256, seed=0, eval_every=25, eval_tasks=256,
+         group_size=8, lr=1e-4, lora_rank=32, max_new_tokens=256, thinking=False, seed=0, eval_every=25, eval_tasks=256,
          out="checkpoints/run"):
     Env, rng = load_env(env), random.Random(seed)
     tok = AutoTokenizer.from_pretrained(model)
@@ -27,14 +27,20 @@ def main(env="envs.countdown:Countdown", model="Qwen/Qwen3-0.6B", steps=200, tas
     net.gradient_checkpointing_enable()
     net.enable_input_require_grads()
     opt = torch.optim.AdamW([p for p in net.parameters() if p.requires_grad], lr=lr)
-    policy = Policy(net, tok, max_new_tokens)
+    policy = Policy(net, tok, max_new_tokens, thinking=thinking)
     held_out = [Env.sample_task(random.Random(10_000 + i)) for i in range(eval_tasks)]  # fixed benchmark
 
     def evaluate(step):
         net.eval()
+        policy.greedy = True
         trajs = asyncio.run(rollout_groups(Env, held_out, policy, 1))
+        policy.greedy = False
+        n = len(trajs)
         solved = sum(t.reward == 1 for t in trajs)
-        print(f"eval step {step:4d}  held-out solved {solved}/{len(trajs)} ({solved / len(trajs):.1%})", flush=True)
+        # format OK = the model answered in the expected tags at least once (Countdown's format)
+        fmt = sum("<answer>" in tok.decode([x for x, m in zip(t.tokens, t.mask) if m]) for t in trajs)
+        print(f"eval step {step:4d}  held-out solved {solved}/{n} ({solved / n:.1%})  "
+              f"format ok {fmt}/{n} ({fmt / n:.1%})", flush=True)
         print("sample:", tok.decode(trajs[0].tokens)[-400:], flush=True)
 
     for step in range(steps):

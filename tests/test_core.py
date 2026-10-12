@@ -31,3 +31,10 @@ def test_multi_turn_rollout_is_token_exact():
 def test_sampled_tasks_are_solvable_types():
     t = Countdown.sample_task(random.Random(0))
     assert len(t["numbers"]) == Countdown.n_numbers and isinstance(t["target"], int)
+
+
+def test_last_answer_counts():
+    env = Countdown()
+    asyncio.run(env.reset({"numbers": [2, 3, 4], "target": 14}))
+    step = asyncio.run(env.step("<think>maybe <answer>2+3</answer>?</think> <answer>2+3*4</answer>"))
+    assert step.reward == 1.0

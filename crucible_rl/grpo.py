@@ -20,6 +20,7 @@ def advantages(rewards: list[float], group_size: int) -> list[float]:
 def loss(model, tokens: list[int], mask: list[int], advantage: float) -> torch.Tensor:
     ids = torch.tensor([tokens], device=model.device)
     logits = model(ids).logits[0, :-1].float()            # position i predicts token i+1
-    logp = logits.log_softmax(-1).gather(1, ids[0, 1:, None]).squeeze(1)
+    # log p(next token); cross_entropy avoids a second vocab-sized copy (long thinking sequences OOM otherwise)
+    logp = -torch.nn.functional.cross_entropy(logits, ids[0, 1:], reduction="none")
     m = torch.tensor(mask[1:], device=model.device, dtype=logp.dtype)
     return -advantage * (logp * m).sum() / m.sum()
