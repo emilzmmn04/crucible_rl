@@ -26,6 +26,26 @@ pip install modal && modal setup
 modal run modal_app.py --steps 200              # trains Qwen3-0.6B + LoRA on a cloud A10G
 ```
 
+## Results
+
+**Countdown (easy), Qwen3-0.6B + LoRA, 100 steps, about 10 min on one A10G.** Held-out benchmark:
+256 fixed tasks the model never trains on, sampled at temperature 1.
+
+| step | 0 | 25 | 50 | 75 | 100 |
+|---|---|---|---|---|---|
+| held-out solved | 7 (2.7%) | 85 (33.2%) | 67 (26.2%) | 86 (33.6%) | 86 (33.6%) |
+
+```bash
+modal run modal_app.py --steps 100   # 3 numbers in 1..10, lr 1e-4, LoRA r=32, 8 tasks x 8 attempts per step
+```
+
+How to read it:
+- The gain comes almost entirely in the first 25 steps, then flattens. Most of it is the model
+  learning to answer inside `<answer>` tags, which it often skipped before training. The arithmetic
+  itself improves little.
+- The eval samples answers, so a single score can move by about ±7 tasks; the dip at step 50 is noise.
+- With 4 numbers in 1..25 the base model solves 0.4%, too rarely for GRPO to get any signal.
+
 ## Write an environment
 
 Subclass `Env` and implement `sample_task`, `reset`, and `step`. See `envs/countdown.py`
