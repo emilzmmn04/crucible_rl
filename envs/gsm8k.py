@@ -1,8 +1,10 @@
 """GSM8K: grade-school math word problems with a single numeric answer.
 
 A fixed dataset rather than generated puzzles: train on the train split, benchmark on the official
-test split (1319 problems) via held_out(). The reward is 1 if the number in the last <answer> tag
-equals the reference answer. Data comes straight from OpenAI's repo, so there's no extra dependency.
+test split (1319 problems) via held_out(). The reward is 1 if the final answer equals the reference.
+The final answer is the last <answer> tag, or the last \\boxed{} (Qwen's habit), so a model isn't
+scored as wrong just for using standard math notation. Data comes straight from OpenAI's repo,
+so there's no extra dependency.
 """
 import functools, json, os, random, re, urllib.request
 from crucible_rl.env import Env, Step
@@ -43,7 +45,8 @@ class GSM8K(Env):
         return task["question"] + "\nGive only the final number inside <answer></answer>."
 
     async def step(self, action):
-        answers = re.findall(r"<answer>(.*?)</answer>", action, re.S)
+        answers = re.findall(r"<answer>(.*?)</answer>|\\boxed\{([^{}]*)\}", action, re.S)
+        answers = [a or b for a, b in answers]
         got = number(answers[-1]) if answers else None
         correct = got is not None and abs(got - self.task["answer"]) < 1e-6
         return Step(reward=float(correct), done=True)

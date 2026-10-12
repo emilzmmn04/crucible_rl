@@ -47,3 +47,10 @@ def test_gsm8k_answer_parsing():
     asyncio.run(env.reset({"question": "q", "answer": 18.0}))
     assert asyncio.run(env.step("<think>maybe <answer>9</answer></think><answer>$18</answer>")).reward == 1.0
     assert asyncio.run(env.step("18")).reward == 0.0  # no tags, no reward
+
+
+def test_gsm8k_accepts_boxed():
+    from envs.gsm8k import GSM8K
+    env = GSM8K()
+    asyncio.run(env.reset({"question": "q", "answer": 18.0}))
+    assert asyncio.run(env.step("so 9 * 2 = 18. The final answer is $\\boxed{18}$")).reward == 1.0
