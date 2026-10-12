@@ -13,16 +13,17 @@ volume = modal.Volume.from_name("crucible-rl-checkpoints", create_if_missing=Tru
 app = modal.App("crucible-rl", image=image)
 
 
-@app.function(gpu="A10G", timeout=6 * 3600, volumes={"/ckpt": volume})
-def train(**kwargs):
+@app.function(gpu="A10G", timeout=6 * 3600, volumes={"/ckpt": volume},
+              secrets=[modal.Secret.from_name("huggingface")])
+def train(name="run", **kwargs):
     from crucible_rl.train import main
-    main(out="/ckpt/run", **kwargs)
+    main(out=f"/ckpt/{name}", **kwargs)  # one folder per run, so runs never overwrite each other
     volume.commit()
 
 
 @app.local_entrypoint()
 def run(model: str = "Qwen/Qwen3-0.6B", env: str = "envs.countdown:Countdown", steps: int = 200,
         thinking: bool = False, max_new_tokens: int = 256, eval_every: int = 25, eval_tasks: int = 256,
-        vllm: bool = False):
+        vllm: bool = False, name: str = "run"):
     train.remote(model=model, env=env, steps=steps, thinking=thinking, max_new_tokens=max_new_tokens,
-                 eval_every=eval_every, eval_tasks=eval_tasks, vllm=vllm)
+                 eval_every=eval_every, eval_tasks=eval_tasks, vllm=vllm, name=name)
