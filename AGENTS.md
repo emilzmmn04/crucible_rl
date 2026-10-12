@@ -62,8 +62,9 @@ environments with verifiable rewards (GRPO + LoRA). Goals, in order:
 
 - `main` holds released versions only. Each finished milestone gets a tag: M0 = `v0.1`, M1 = `v0.2`,
   M2 = `v0.3`, and so on. `v1.0` comes when every milestone on the roadmap is done.
-- Work for the next milestone happens on a branch named after its version (currently `v0.2` for M1),
-  and is merged into `main` and tagged when the milestone is done.
+- Work for the next milestone happens on a branch `dev/<version>` (currently `dev/v0.3` for M2).
+  When the milestone is done, it is merged into `main`, tagged `<version>`, and the branch is
+  deleted. (Branches are prefixed with `dev/` so they never share a name with a tag.)
 
 ## Recipes vs. framework
 
@@ -107,7 +108,7 @@ environments with verifiable rewards (GRPO + LoRA). Goals, in order:
   LoRA r=32, lr=1e-4, 100 steps (~10 min A10G): held-out (256 tasks, sampled) 2.7% → 33.6%.
   Gain came by step 25 and then plateaued; mostly learning the `<answer>` format, not better math.
   Original difficulty (4 numbers, 1–25) was too hard: baseline 0.4%, no learning signal.
-- **M1 (in progress, branch `v0.2`):** greedy eval with format/solve scores, `--thinking`, `--vllm`
+- **M1 (done, tag `v0.2`):** greedy eval with format/solve scores, `--thinking`, `--vllm`
   (4–5× faster), best-checkpoint saving, `--init-adapter`, `CountdownHard`, `push` to the HF Hub.
   Best result: thinking + vLLM, easy Countdown 10.5% → 97.7% held-out at step 40
   (`/ckpt/countdown-think-vllm-100/best` on the Modal volume). Capability evals done:
