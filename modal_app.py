@@ -24,9 +24,9 @@ def train(name="run", **kwargs):
 @app.local_entrypoint()
 def run(model: str = "Qwen/Qwen3-0.6B", env: str = "envs.countdown:Countdown", steps: int = 200,
         thinking: bool = False, max_new_tokens: int = 256, eval_every: int = 25, eval_tasks: int = 256,
-        vllm: bool = False, name: str = "run"):
+        vllm: bool = False, name: str = "run", init_adapter: str = ""):
     train.remote(model=model, env=env, steps=steps, thinking=thinking, max_new_tokens=max_new_tokens,
-                 eval_every=eval_every, eval_tasks=eval_tasks, vllm=vllm, name=name)
+                 eval_every=eval_every, eval_tasks=eval_tasks, vllm=vllm, name=name, init_adapter=init_adapter)
 
 
 @app.function(volumes={"/ckpt": volume}, secrets=[modal.Secret.from_name("huggingface")])

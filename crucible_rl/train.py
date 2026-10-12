@@ -5,7 +5,7 @@
 import argparse, asyncio, importlib, inspect, random, time
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from peft import LoraConfig, get_peft_model
+from peft import LoraConfig, PeftModel, get_peft_model
 
 from . import grpo
 from .policy import Policy, VLLMPolicy
@@ -18,12 +18,15 @@ def load_env(spec: str):
 
 
 def main(env="envs.countdown:Countdown", model="Qwen/Qwen3-0.6B", steps=200, tasks_per_step=8,
-         group_size=8, lr=1e-4, lora_rank=32, max_new_tokens=256, thinking=False, vllm=False, seed=0, eval_every=25, eval_tasks=256,
+         group_size=8, lr=1e-4, lora_rank=32, max_new_tokens=256, thinking=False, vllm=False, init_adapter="", seed=0, eval_every=25, eval_tasks=256,
          out="checkpoints/run"):
     Env, rng = load_env(env), random.Random(seed)
     tok = AutoTokenizer.from_pretrained(model)
     net = AutoModelForCausalLM.from_pretrained(model, torch_dtype=torch.bfloat16, device_map="auto")
-    net = get_peft_model(net, LoraConfig(r=lora_rank, lora_alpha=2 * lora_rank, target_modules="all-linear"))
+    if init_adapter:  # continue from (or, with steps=0, only evaluate) a saved adapter
+        net = PeftModel.from_pretrained(net, init_adapter, is_trainable=True)
+    else:
+        net = get_peft_model(net, LoraConfig(r=lora_rank, lora_alpha=2 * lora_rank, target_modules="all-linear"))
     net.gradient_checkpointing_enable()
     net.enable_input_require_grads()
     opt = torch.optim.AdamW([p for p in net.parameters() if p.requires_grad], lr=lr)
