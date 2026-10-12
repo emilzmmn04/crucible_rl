@@ -39,10 +39,9 @@ environments with verifiable rewards (GRPO + LoRA). Goals, in order:
 | `crucible_rl/train.py` | Loop: sample tasks → rollout groups → advantages → one optimizer step. CLI flags = `main()` kwargs |
 | `envs/countdown.py` | Example env: arithmetic target, 2 turns, safe AST evaluation for the reward |
 | `envs/gsm8k.py` | GSM8K: trains on the train split, benchmarks on the official test split via `held_out()`. Accepts `<answer>` or `\\boxed{}` |
-| `docs/results.json` | Every published number (benchmarks, training curves, speed). Single source for charts and cards |
-| `docs/plots.py` | Renders `docs/img/*` (light + dark, SVG + PNG) from results.json: `uvx --with matplotlib python docs/plots.py` |
-| `docs/model-cards/` | Hugging Face model cards; `modal run modal_app.py::push` uploads one with the charts |
-| `modal_app.py` | Runs `train.main` on a cloud GPU (A10G). Checkpoints go to Modal volume `crucible-rl-checkpoints` |
+| `recipes/<name>/` | One experiment, self-contained: `README.md` (commands, results, lessons), `results.json` (every number), `img/` (charts), `model-card.md` (HF card) |
+| `tools/plots.py` | Renders a recipe's charts (light + dark, SVG + PNG) from its results.json: `uvx --with matplotlib python tools/plots.py recipes/<name>` |
+| `modal_app.py` | Runs `train.main` on a cloud GPU (A10G); `--name` sets the checkpoint folder on Modal volume `crucible-rl-checkpoints`. `push` uploads `<run>/best` with a recipe's card and charts to the HF Hub (private) |
 | `tests/test_core.py` | No-GPU tests using a scripted character-level policy |
 | `index.html` | Landing page / technical note (white, black and grey, Inter, research-paper look) |
 
@@ -65,6 +64,15 @@ environments with verifiable rewards (GRPO + LoRA). Goals, in order:
   M2 = `v0.3`, and so on. `v1.0` comes when every milestone on the roadmap is done.
 - Work for the next milestone happens on a branch named after its version (currently `v0.2` for M1),
   and is merged into `main` and tagged when the milestone is done.
+
+## Recipes vs. framework
+
+- The framework is `crucible_rl/`, `envs/`, `modal_app.py`, `tools/`. It must never import or read
+  anything from `recipes/`.
+- Every experiment goes in its own `recipes/<name>/` folder and only there: commands, numbers,
+  charts, model card. Numbers live in `results.json` only; tables, charts and cards are built from it.
+- This keeps a later split easy: `recipes/` can move to its own repo without touching the framework.
+- Trained weights never go in git. They live on the Modal volume and on the HF Hub (`crucible-rl/`).
 
 ## Invariants (do not break)
 

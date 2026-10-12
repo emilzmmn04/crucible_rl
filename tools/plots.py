@@ -1,16 +1,16 @@
-"""Render the benchmark charts in docs/img from docs/results.json.
+"""Render a recipe's benchmark charts into <recipe>/img from <recipe>/results.json.
 
-    uvx --with matplotlib python docs/plots.py
+    uvx --with matplotlib python tools/plots.py recipes/countdown-qwen3-0.6b
 
 Every chart is written in light and dark versions, as SVG (README, website) and PNG (Hugging Face, PRs).
 Numbers live only in results.json, so a chart can never disagree with the table it illustrates.
 """
-import json, pathlib
+import json, pathlib, sys
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-HERE = pathlib.Path(__file__).parent
+HERE = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "recipes/countdown-qwen3-0.6b")
 R = json.loads((HERE / "results.json").read_text())
 THEMES = {  # validated palette: blue/orange pass CVD + contrast checks on both surfaces
     "light": dict(surface="#fcfcfb", ink="#0b0b0b", ink2="#52514e", grid="#e4e3df",
