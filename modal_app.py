@@ -27,3 +27,19 @@ def run(model: str = "Qwen/Qwen3-0.6B", env: str = "envs.countdown:Countdown", s
         vllm: bool = False, name: str = "run"):
     train.remote(model=model, env=env, steps=steps, thinking=thinking, max_new_tokens=max_new_tokens,
                  eval_every=eval_every, eval_tasks=eval_tasks, vllm=vllm, name=name)
+
+
+@app.function(volumes={"/ckpt": volume}, secrets=[modal.Secret.from_name("huggingface")])
+def push(name: str, repo: str, card: str):
+    """Upload a run's LoRA adapter plus a model card to the Hugging Face Hub, private by default.
+
+        modal run modal_app.py::push --name <run> --repo crucible-rl/<model> --card "$(cat card.md)"
+    """
+    from huggingface_hub import HfApi
+    api = HfApi()
+    api.create_repo(repo, private=True, exist_ok=True)
+    with open(f"/ckpt/{name}/README.md", "w") as f:
+        f.write(card)
+    api.upload_folder(folder_path=f"/ckpt/{name}", repo_id=repo)
+    print(f"uploaded https://huggingface.co/{repo}")
+
