@@ -95,7 +95,11 @@ environments with verifiable rewards (GRPO + LoRA). Goals, in order:
   LoRA r=32, lr=1e-4, 100 steps (~10 min A10G): held-out (256 tasks, sampled) 2.7% → 33.6%.
   Gain came by step 25 and then plateaued; mostly learning the `<answer>` format, not better math.
   Original difficulty (4 numbers, 1–25) was too hard: baseline 0.4%, no learning signal.
-- **Next:** greedy eval + separate format/solve metrics; get math to improve past the plateau.
+- **M1 (in progress, branch `v0.2`):** greedy eval with format/solve scores, `--thinking`, `--vllm`
+  (4–5× faster), best-checkpoint saving, `--init-adapter`, `CountdownHard`, `push` to the HF Hub.
+  Best result: thinking + vLLM, easy Countdown 10.5% → 97.7% held-out at step 40
+  (`/ckpt/countdown-think-vllm-100/best` on the Modal volume). Next: capability evals (hard
+  Countdown, GSM8K), then upload to `crucible-rl/Qwen3-0.6B-Countdown-GRPO`.
 - M1: held-out eval script (baseline vs trained), vLLM for faster rollouts
 - M2: Docker sandboxed code-fix env with an out-of-sandbox verifier
 - M3: `crl` CLI, trajectory replay

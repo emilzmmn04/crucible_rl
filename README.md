@@ -6,8 +6,8 @@ Put a small open LLM (0.6B–8B) in a multi-turn environment, reward it with cod
 answer, and train it with GRPO + LoRA on a single rented GPU. No config system, no registries, no
 framework to learn: five files, each readable top to bottom.
 
-> **First result:** Qwen3-0.6B went from **2.7% → 33.6%** on a held-out Countdown benchmark in
-> 100 steps (about 10 minutes on one A10G). [Details and caveats below.](#results)
+> **Result:** with thinking on, Qwen3-0.6B went from **10.5% → 97.7%** on a held-out Countdown
+> benchmark in 40 GRPO steps (about 15 minutes on one A10G). [Details and caveats below.](#results)
 
 ## Quickstart
 
@@ -46,20 +46,48 @@ To understand the algorithm, read `grpo.py` (25 lines), then `rollout.py` (40 li
 
 ## Results
 
-**Countdown (easy), Qwen3-0.6B + LoRA r=32, lr 1e-4, 8 tasks × 8 attempts per step, 100 steps.**
-The held-out benchmark is 256 fixed tasks the model never trains on, sampled at temperature 1.
+All numbers are on the same held-out benchmark: 256 fixed easy Countdown tasks (3 numbers from 1–10)
+the model never trains on, scored with greedy decoding. *Solved* = the verified answer hits the
+target; *format OK* = the model finished with an `<answer>` tag.
 
-| step | 0 | 25 | 50 | 75 | 100 |
-|---|---|---|---|---|---|
-| held-out solved | 7 (2.7%) | 85 (33.2%) | 67 (26.2%) | 86 (33.6%) | 86 (33.6%) |
+### Thinking on, vLLM rollouts (current best)
 
-How to read it:
-- The gain comes almost entirely in the first 25 steps, then flattens. Most of it is the model
-  learning to answer inside `<answer>` tags, which it often skipped before training. The
-  arithmetic itself improves little. That is the next thing to fix.
-- The eval samples answers, so a single score can move by about ±7 tasks. The dip at step 50 is noise.
-- With 4 numbers in 1..25, the base model solves 0.4%, too rarely for GRPO to get any signal.
-  Start with a task the model sometimes solves.
+```bash
+modal run modal_app.py --steps 100 --thinking --max-new-tokens 512 --vllm --eval-every 10
+```
+
+| step | 0 | 10 | 20 | 30 | **40** | 50 | 60 | 70 | 80 | 90 | 100 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| solved % | 10.5 | 80.1 | 91.8 | 93.4 | **97.7** | 97.3 | 94.9 | 96.9 | 95.3 | 97.3 | 97.3 |
+| format OK % | 39.1 | 85.5 | 95.7 | 95.7 | **99.6** | 99.2 | 98.4 | 100 | 98.0 | 98.8 | 98.0 |
+
+Qwen3-0.6B + LoRA r=32, lr 1e-4, 8 tasks × 8 attempts per step, 512-token thinking budget,
+about 10–20 s per step on one A10G.
+
+- **What RL taught:** the base model reasons until it runs out of tokens and never answers (39%
+  format OK). After training, it tries a combination, checks it, corrects itself and answers in a few
+  lines, e.g. `(10*(5+1)) = 60. Too high. … (5*(10+1)) = 55. Perfect!`
+- **Overtraining:** in an earlier 150-step run, the score peaked at 89.5% (step 75) and fell to 78.1%
+  by step 150. Once almost every attempt is correct, most groups give no signal, and the remaining
+  updates push the model off course. So training keeps the best checkpoint (`<run>/best`), not
+  just the last one.
+- **Run-to-run variance:** sampling is not seeded. Two runs with identical settings reached 69.5% and
+  91.8% by step 20–25.
+- **Limits:** this is easy Countdown. Harder variants and other math benchmarks are next.
+
+### Thinking off (first run)
+
+Without thinking, the model must answer in one shot. 100 steps moved it from 2.7% to 33.6%
+(sampled eval), almost all of it from learning the `<answer>` format; the arithmetic barely
+improved. With 4 numbers from 1–25, the base model solved 0.4%: too rarely for GRPO to get any
+signal. Start with a task the model sometimes solves.
+
+### Speed
+
+| rollouts | seconds per step (thinking, 512 tokens) |
+|---|---|
+| HF `generate` | 127–289 |
+| vLLM (`--vllm`) | 10–34 |
 
 ## Write an environment
 
@@ -94,7 +122,7 @@ agentic RL, and the fastest way to go from a new environment idea to a training 
 ## Roadmap
 
 - [x] **M0:** GRPO + LoRA loop, Countdown env, held-out eval, first result on Modal
-- [ ] **M1:** greedy eval with separate format/solve scores, vLLM for faster rollouts
+- [ ] **M1:** greedy eval with format/solve scores ✓, vLLM rollouts ✓, best checkpoint ✓, capability evals, HF Hub release
 - [ ] **M2:** Docker-sandboxed code-fix environment with an out-of-sandbox verifier
 - [ ] **M3:** `crl` CLI, trajectory replay
 - [ ] **M4:** Rust rollout scheduler and sandbox pool, remote workers
