@@ -8,7 +8,8 @@ image = (modal.Image.debian_slim(python_version="3.12")
          .pip_install("vllm", "peft", "accelerate")  # vllm pins compatible torch + transformers
          .env({"PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",  # avoid fragmentation OOMs
                "VLLM_USE_FLASHINFER_SAMPLER": "0"})  # its sampler JIT-compiles and needs nvcc
-         .add_local_python_source("crucible_rl", "envs"))
+         .add_local_python_source("crucible_rl", "envs")
+         .add_local_dir("docs", "/root/docs"))  # model cards + benchmark charts for push
 volume = modal.Volume.from_name("crucible-rl-checkpoints", create_if_missing=True)
 app = modal.App("crucible-rl", image=image)
 
@@ -31,15 +32,17 @@ def run(model: str = "Qwen/Qwen3-0.6B", env: str = "envs.countdown:Countdown", s
 
 @app.function(volumes={"/ckpt": volume}, secrets=[modal.Secret.from_name("huggingface")])
 def push(name: str, repo: str, card: str):
-    """Upload a run's LoRA adapter plus a model card to the Hugging Face Hub, private by default.
+    """Upload a run's adapter, its model card and the benchmark charts to the HF Hub, private by default.
 
-        modal run modal_app.py::push --name <run> --repo crucible-rl/<model> --card "$(cat card.md)"
+        modal run modal_app.py::push --name <run>/best --repo crucible-rl/<model> \\
+            --card docs/model-cards/<model>.md
     """
+    import shutil
     from huggingface_hub import HfApi
+    folder = f"/ckpt/{name}"
+    shutil.copy(f"/root/{card}", f"{folder}/README.md")
+    shutil.copytree("/root/docs/img", f"{folder}/assets", dirs_exist_ok=True)
     api = HfApi()
     api.create_repo(repo, private=True, exist_ok=True)
-    with open(f"/ckpt/{name}/README.md", "w") as f:
-        f.write(card)
-    api.upload_folder(folder_path=f"/ckpt/{name}", repo_id=repo)
+    api.upload_folder(folder_path=folder, repo_id=repo)
     print(f"uploaded https://huggingface.co/{repo}")
-

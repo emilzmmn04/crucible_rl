@@ -38,6 +38,10 @@ environments with verifiable rewards (GRPO + LoRA). Goals, in order:
 | `crucible_rl/grpo.py` | `advantages()` (group-normalized) and `loss()` (masked policy gradient) |
 | `crucible_rl/train.py` | Loop: sample tasks → rollout groups → advantages → one optimizer step. CLI flags = `main()` kwargs |
 | `envs/countdown.py` | Example env: arithmetic target, 2 turns, safe AST evaluation for the reward |
+| `envs/gsm8k.py` | GSM8K: trains on the train split, benchmarks on the official test split via `held_out()`. Accepts `<answer>` or `\\boxed{}` |
+| `docs/results.json` | Every published number (benchmarks, training curves, speed). Single source for charts and cards |
+| `docs/plots.py` | Renders `docs/img/*` (light + dark, SVG + PNG) from results.json: `uvx --with matplotlib python docs/plots.py` |
+| `docs/model-cards/` | Hugging Face model cards; `modal run modal_app.py::push` uploads one with the charts |
 | `modal_app.py` | Runs `train.main` on a cloud GPU (A10G). Checkpoints go to Modal volume `crucible-rl-checkpoints` |
 | `tests/test_core.py` | No-GPU tests using a scripted character-level policy |
 | `index.html` | Landing page / technical note (white, black and grey, Inter, research-paper look) |
@@ -98,8 +102,9 @@ environments with verifiable rewards (GRPO + LoRA). Goals, in order:
 - **M1 (in progress, branch `v0.2`):** greedy eval with format/solve scores, `--thinking`, `--vllm`
   (4–5× faster), best-checkpoint saving, `--init-adapter`, `CountdownHard`, `push` to the HF Hub.
   Best result: thinking + vLLM, easy Countdown 10.5% → 97.7% held-out at step 40
-  (`/ckpt/countdown-think-vllm-100/best` on the Modal volume). Next: capability evals (hard
-  Countdown, GSM8K), then upload to `crucible-rl/Qwen3-0.6B-Countdown-GRPO`.
+  (`/ckpt/countdown-think-vllm-100/best` on the Modal volume). Capability evals done:
+  hard Countdown 4.7% → 81.2%, GSM8K 52.9% → 54.6% (preserved). Next: upload to
+  `crucible-rl/Qwen3-0.6B-Countdown-GRPO`, then RL on the GSM8K train split.
 - M1: held-out eval script (baseline vs trained), vLLM for faster rollouts
 - M2: Docker sandboxed code-fix env with an out-of-sandbox verifier
 - M3: `crl` CLI, trajectory replay
