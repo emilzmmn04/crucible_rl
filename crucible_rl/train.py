@@ -26,7 +26,8 @@ def main(env="envs.countdown:Countdown", model="Qwen/Qwen3-0.6B", steps=200, tas
     if init_adapter:  # continue from (or, with steps=0, only evaluate) a saved adapter
         net = PeftModel.from_pretrained(net, init_adapter, is_trainable=True)
     else:
-        net = get_peft_model(net, LoraConfig(r=lora_rank, lora_alpha=2 * lora_rank, target_modules="all-linear"))
+        net = get_peft_model(net, LoraConfig(r=lora_rank, lora_alpha=2 * lora_rank, target_modules="all-linear",
+                                             task_type="CAUSAL_LM"))
     net.gradient_checkpointing_enable()
     net.enable_input_require_grads()
     opt = torch.optim.AdamW([p for p in net.parameters() if p.requires_grad], lr=lr)
