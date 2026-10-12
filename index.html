@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>crucible_rl — an environment runtime for agentic reinforcement learning</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#111; --mid:#555; --light:#888; --rule:#ddd; --bg:#fff; --code:#f6f6f6; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.65 Inter, Arial, sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:72px 24px 120px; }
+  header.top { display:flex; justify-content:space-between; font-size:12px; color:var(--light); border-bottom:1px solid var(--rule); padding-bottom:10px; margin-bottom:56px; letter-spacing:.02em; }
+  h1 { font-size:34px; font-weight:600; letter-spacing:-.02em; margin:0 0 8px; }
+  h1 span { color:var(--light); font-weight:400; }
+  .sub { font-size:18px; color:var(--mid); margin:0 0 28px; }
+  .meta { font-size:13px; color:var(--light); margin-bottom:40px; }
+  .meta b { color:var(--ink); font-weight:500; }
+  h2 { font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:.08em; margin:64px 0 16px; padding-top:16px; border-top:1px solid var(--ink); }
+  h2 .n { color:var(--light); margin-right:10px; }
+  h3 { font-size:15px; font-weight:600; margin:28px 0 6px; }
+  p { margin:0 0 14px; }
+  .abstract { border-left:2px solid var(--ink); padding:4px 0 4px 18px; color:#222; }
+  pre, code { font-family:"JetBrains Mono", Menlo, monospace; font-size:12.5px; }
+  pre { background:var(--code); border:1px solid var(--rule); padding:16px 18px; overflow-x:auto; line-height:1.55; margin:14px 0 6px; }
+  code { background:var(--code); padding:1px 4px; }
+  pre code { background:none; padding:0; }
+  .cap { font-size:12px; color:var(--light); margin-bottom:22px; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; margin:14px 0 6px; }
+  th { text-align:left; font-weight:600; border-bottom:1px solid var(--ink); padding:6px 8px 6px 0; }
+  td { border-bottom:1px solid var(--rule); padding:7px 8px 7px 0; vertical-align:top; }
+  td:first-child { white-space:nowrap; }
+  .diagram { font-family:"JetBrains Mono", Menlo, monospace; font-size:12px; line-height:1.45; white-space:pre; background:#fff; border:1px solid var(--ink); padding:20px; overflow-x:auto; }
+  ol, ul { padding-left:20px; } li { margin-bottom:6px; }
+  .tag { display:inline-block; font-size:11px; border:1px solid var(--ink); padding:0 6px; margin-right:6px; letter-spacing:.04em; }
+  .muted { color:var(--light); }
+  footer { margin-top:80px; border-top:1px solid var(--rule); padding-top:14px; font-size:12px; color:var(--light); display:flex; justify-content:space-between; }
+  a { color:var(--ink); }
+</style>
+</head>
+<body>
+<main>
+
+<header class="top"><span>crucible_rl / technical note 001</span><span>draft · October 2026</span></header>
+
+<h1>crucible_rl <span>v0.1</span></h1>
+<p class="sub">An environment runtime for agentic reinforcement learning of small open models.</p>
+<p class="meta"><b>Status:</b> pre-alpha, design phase &nbsp;·&nbsp; <b>License:</b> Apache-2.0 (core) &nbsp;·&nbsp; <b>Languages:</b> Rust, Python</p>
+
+<p class="abstract"><b>Abstract.</b> Training algorithms for LLM reinforcement learning (GRPO, PPO, RLOO) are well served by existing trainers. The bottleneck for <i>agentic</i> RL is elsewhere: running thousands of multi-step, tool-using episodes in isolated sandboxes, scoring them with tamper-proof verifiers, and delivering token-exact trajectories to the trainer without stalling the GPU. crucible_rl is a Rust runtime for exactly that layer — environments, rollouts, rewards, trajectories — with a Gym-like Python API on top and pluggable trainer backends below.</p>
+
+<h2><span class="n">01</span>Thesis</h2>
+<p>We do not reimplement the optimizer. We make the loop around it fast, reproducible and easy.</p>
+<pre><code>policy  +  environment  +  verifier  +  config   →   a better agent</code></pre>
+<ul>
+  <li><b>Environment-first.</b> The unit of work is an episode, not a prompt.</li>
+  <li><b>Asynchronous by default.</b> One slow <code>pytest</code> never blocks 1,023 other episodes.</li>
+  <li><b>Verifiable rewards.</b> Verifiers run outside the agent's sandbox; the agent never sees answers or grader code.</li>
+  <li><b>Token-exact.</b> Trajectories keep token IDs, logprobs, loss masks and policy version — no re-tokenization drift.</li>
+  <li><b>One GPU is a first-class target.</b> A 4B model + LoRA on a single 24 GB card must work out of the box.</li>
+</ul>
+
+<h2><span class="n">02</span>Interface</h2>
+<h3>Define an environment</h3>
+<pre><code>import crucible_rl as crl
+
+class FixTests(crl.Env):
+    sandbox = crl.Docker("python:3.12-slim")
+    tools   = [crl.tools.shell, crl.tools.edit_file]
+    max_turns = 24
+
+    async def reset(self, task):
+        await self.sandbox.checkout(task.repo, task.commit)
+        return f"Make the failing tests pass: {task.issue}"
+
+    @crl.verifier(isolated=True)
+    async def reward(self, sb, task):
+        r = await sb.run("pytest -q", timeout=120)
+        return 1.0 if r.exit_code == 0 else r.passed / r.total</code></pre>
+<p class="cap">Fig. 1 — Proposed API. Tools, sandbox and verifier are declarative; the runtime owns the loop.</p>
+
+<h3>Train</h3>
+<pre><code>$ crl train \
+    --model  Qwen/Qwen3-4B \
+    --env    ./envs/fix_tests.py --tasks swe-mini.jsonl \
+    --algo   grpo --group-size 8 --lora-rank 32 \
+    --gpus   1</code></pre>
+
+<h3>Low-level, Gymnasium-compatible</h3>
+<pre><code>env = crl.make("terminal/fix-tests-v1", num_envs=256)
+
+async for ev in env.events():                  # no global step barrier
+    if ev.kind == "observation":
+        await env.submit(ev.env_id, await policy(ev.obs))
+    elif ev.kind == "done":
+        trainer.push(ev.trajectory)            # tokens, logprobs, masks, reward</code></pre>
+<p class="cap">Fig. 2 — Event-driven vector env. A synchronous <code>reset()/step()</code> wrapper exists for debugging.</p>
+
+<h2><span class="n">03</span>Architecture</h2>
+<div class="diagram">  crl CLI  ·  Python SDK (PyO3)  ·  TUI (ratatui)
+ ───────────────────────────────────────────────────────────
+                 RUST CORE  (tokio)
+   ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐
+   │ rollout      │ │ sandbox pool │ │ verifier engine  │
+   │ scheduler    │ │ warm, reset- │ │ out-of-sandbox,  │
+   │ backpressure │ │ verified     │ │ versioned        │
+   └──────┬───────┘ └──────┬───────┘ └────────┬─────────┘
+          └────────────────┼──────────────────┘
+                 trajectory store (Arrow → Parquet)
+ ───────────┬───────────────────────────────┬───────────────
+   INFERENCE│ vLLM / SGLang (OpenAI API +   │TRAINER
+            │ token/logprob extension)      │ adapter → TRL · verl ·
+            │◄──── weight sync (LoRA hot-   │ own minimal GRPO
+            │      swap / NCCL broadcast) ──┤
+</div>
+<p class="cap">Fig. 3 — Three compute classes: environment (CPU), inference (GPU), training (GPU). Co-located on one box for v0.</p>
+
+<table>
+<tr><th>Component</th><th>Responsibility</th><th>Tech</th></tr>
+<tr><td>Rollout scheduler</td><td>Concurrent episodes, retries, timeouts, off-policy staleness bound</td><td>Rust, tokio</td></tr>
+<tr><td>Sandbox pool</td><td>Warm containers, verified reset or destroy</td><td>Docker → Firecracker / gVisor</td></tr>
+<tr><td>Verifier engine</td><td>Tests, schema checks, partial credit, LLM-judge (opt-in)</td><td>Rust + Python plugins</td></tr>
+<tr><td>Trajectory store</td><td>Tokens, logprobs, masks, rewards, versions</td><td>Arrow, Parquet, SQLite</td></tr>
+<tr><td>Inference adapter</td><td>Batched generation, logprobs, LoRA hot-swap</td><td>vLLM, SGLang, llama.cpp</td></tr>
+<tr><td>Trainer adapter</td><td>Group advantages, loss, checkpoint, weight push</td><td>PyTorch (TRL / verl)</td></tr>
+<tr><td>Observability</td><td>Reward curves, per-tool failures, trajectory replay</td><td>TUI, OpenTelemetry</td></tr>
+</table>
+
+<h2><span class="n">04</span>Positioning</h2>
+<table>
+<tr><th>Project</th><th>Focus</th><th>Gap crucible_rl targets</th></tr>
+<tr><td>verl, OpenRLHF, NeMo-RL</td><td>Scalable trainers</td><td>Environment & sandbox layer left to user</td></tr>
+<tr><td>TRL</td><td>Accessible trainers</td><td>Weak multi-turn / tool-sandbox story</td></tr>
+<tr><td>ART, verifiers, SkyRL, rLLM</td><td>Agentic RL in Python</td><td>Python-bound rollout concurrency; isolation</td></tr>
+<tr><td>PufferLib, EnvPool</td><td>Fast classic-RL envs in C/C++</td><td>Not designed for LLM agents</td></tr>
+</table>
+<p class="muted">Ambition: be the EnvPool/PufferLib of agentic RL — the fast, boring, correct environment layer every trainer can plug into.</p>
+
+<h2><span class="n">05</span>Roadmap</h2>
+<table>
+<tr><th>Milestone</th><th>Scope</th><th>Proof</th></tr>
+<tr><td><span class="tag">M0</span>Loop</td><td>Python-only, 1 GPU, TRL GRPO, toy env (Countdown / text game)</td><td>Reward curve goes up</td></tr>
+<tr><td><span class="tag">M1</span>Core</td><td>Rust scheduler + Docker pool + PyO3 bindings, vLLM adapter</td><td>×N rollout throughput vs. Python baseline</td></tr>
+<tr><td><span class="tag">M2</span>Agent</td><td>Terminal/code-fix env, isolated verifier, token-exact store</td><td>Qwen3-4B: held-out pass@1 baseline → trained</td></tr>
+<tr><td><span class="tag">M3</span>DX</td><td><code>crl</code> CLI, TUI, trajectory replay, env registry</td><td>New env to training run in &lt; 15 min</td></tr>
+<tr><td><span class="tag">M4</span>Scale</td><td>Remote workers, microVM isolation, multi-GPU via verl</td><td>1k concurrent sandboxes</td></tr>
+</table>
+
+<h2><span class="n">06</span>Open questions</h2>
+<ol>
+  <li>Bring-your-own-trainer only, or ship a minimal GRPO trainer for the single-GPU path?</li>
+  <li>Off-policy tolerance: how many policy versions may a rollout lag before discard or importance-correction?</li>
+  <li>Reward hacking: which canaries and audits are built in by default?</li>
+  <li>Open-core boundary: is managed cloud sandboxing the closed part?</li>
+</ol>
+
+<footer><span>crucible_rl — technical note 001</span><span>not yet released</span></footer>
+</main>
+</body>
+</html>

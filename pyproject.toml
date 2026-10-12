@@ -1,0 +1,12 @@
+[project]
+name = "crucible_rl"
+version = "0.0.1"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+train = ["torch", "transformers", "peft", "accelerate"]
+dev = ["pytest", "modal"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
