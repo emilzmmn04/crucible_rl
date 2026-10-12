@@ -1,0 +1,30 @@
+{
+  "model": "Qwen/Qwen3-0.6B",
+  "adapter": "crucible-rl/Qwen3-0.6B-Countdown-GRPO",
+  "checkpoint": "countdown-think-vllm-100/best (step 40)",
+  "date": "2026-10-13",
+  "settings": {
+    "algorithm": "GRPO, one on-policy step per batch",
+    "lora": "r=32, alpha=64, all linear layers",
+    "lr": 1e-4, "tasks_per_step": 8, "group_size": 8,
+    "thinking": true, "train_max_new_tokens": 512, "rollouts": "vLLM", "gpu": "1x A10G (Modal)",
+    "train_env": "envs.countdown:Countdown (3 numbers, 1-10)"
+  },
+  "benchmarks": [
+    {"name": "Countdown (easy)", "note": "trained on (held-out tasks)", "n": 256, "max_new_tokens": 512, "base": 10.5, "trained": 97.7},
+    {"name": "Countdown (hard)", "note": "never trained on: 4 numbers, 1-25", "n": 256, "max_new_tokens": 1024, "base": 4.7, "trained": 81.2},
+    {"name": "GSM8K", "note": "never trained on: official test set", "n": 1319, "max_new_tokens": 1024, "base": 52.9, "trained": 54.6}
+  ],
+  "training_curve": {
+    "run": "countdown-think-vllm-100",
+    "step":      [0,    10,   20,   30,   40,   50,   60,   70,   80,   90,   100],
+    "solved":    [10.5, 80.1, 91.8, 93.4, 97.7, 97.3, 94.9, 96.9, 95.3, 97.3, 97.3],
+    "format_ok": [39.1, 85.5, 95.7, 95.7, 99.6, 99.2, 98.4, 100.0, 98.0, 98.8, 98.0]
+  },
+  "overtraining_run": {
+    "run": "countdown-think-vllm-150",
+    "step":   [0,    25,   50,   75,   100,  125,  150],
+    "solved": [10.5, 69.5, 79.3, 89.5, 88.7, 83.6, 78.1]
+  },
+  "speed_seconds_per_step": {"HF generate": [127, 289], "vLLM": [10, 34]}
+}

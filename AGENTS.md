@@ -34,11 +34,14 @@ environments with verifiable rewards (GRPO + LoRA). Goals, in order:
 |---|---|
 | `crucible_rl/env.py` | `Env` contract: `sample_task(rng)`, `async reset(task) -> str`, `async step(text) -> Step` |
 | `crucible_rl/rollout.py` | Runs episodes. `Trajectory` = flat `tokens` + `mask` (1 = model-generated) + `reward` |
-| `crucible_rl/policy.py` | HF model with async `generate()`; concurrent requests are batched into one GPU call |
+| `crucible_rl/policy.py` | HF model with async `generate()`; concurrent requests are batched into one GPU call. `VLLMPolicy` (`--vllm`) samples with vLLM on the same GPU, about 4–5× faster; the LoRA adapter is synced after each step |
 | `crucible_rl/grpo.py` | `advantages()` (group-normalized) and `loss()` (masked policy gradient) |
 | `crucible_rl/train.py` | Loop: sample tasks → rollout groups → advantages → one optimizer step. CLI flags = `main()` kwargs |
 | `envs/countdown.py` | Example env: arithmetic target, 2 turns, safe AST evaluation for the reward |
-| `modal_app.py` | Runs `train.main` on a cloud GPU (A10G). Checkpoints go to Modal volume `crucible-rl-checkpoints` |
+| `envs/gsm8k.py` | GSM8K: trains on the train split, benchmarks on the official test split via `held_out()`. Accepts `<answer>` or `\\boxed{}` |
+| `recipes/<name>/` | One experiment, self-contained: `README.md` (commands, results, lessons), `results.json` (every number), `img/` (charts), `model-card.md` (HF card) |
+| `tools/plots.py` | Renders a recipe's charts (light + dark, SVG + PNG) from its results.json: `uvx --with matplotlib python tools/plots.py recipes/<name>` |
+| `modal_app.py` | Runs `train.main` on a cloud GPU (A10G); `--name` sets the checkpoint folder on Modal volume `crucible-rl-checkpoints`. `push` uploads `<run>/best` with a recipe's card and charts to the HF Hub (private) |
 | `tests/test_core.py` | No-GPU tests using a scripted character-level policy |
 | `index.html` | Landing page / technical note (white, black and grey, Inter, research-paper look) |
 
@@ -55,12 +58,31 @@ environments with verifiable rewards (GRPO + LoRA). Goals, in order:
 9. **Commits** are small and use imperative messages, e.g. `add held-out eval`. One idea per commit.
 10. **Keep this file current.** Update the Layout and Status sections whenever you change them.
 
+## Versions and branches
+
+- `main` holds released versions only. Each finished milestone gets a tag: M0 = `v0.1`, M1 = `v0.2`,
+  M2 = `v0.3`, and so on. `v1.0` comes when every milestone on the roadmap is done.
+- Work for the next milestone happens on a branch named after its version (currently `v0.2` for M1),
+  and is merged into `main` and tagged when the milestone is done.
+
+## Recipes vs. framework
+
+- The framework is `crucible_rl/`, `envs/`, `modal_app.py`, `tools/`. It must never import or read
+  anything from `recipes/`.
+- Every experiment goes in its own `recipes/<name>/` folder and only there: commands, numbers,
+  charts, model card. Numbers live in `results.json` only; tables, charts and cards are built from it.
+- This keeps a later split easy: `recipes/` can move to its own repo without touching the framework.
+- Trained weights never go in git. They live on the Modal volume and on the HF Hub (`crucible-rl/`).
+
 ## Invariants (do not break)
 
 - **Token-exact trajectories.** Never re-tokenize model output. Env text is appended
   with mask 0, and generated ids with mask 1.
 - **On-policy, one gradient step per batch.** This is why `grpo.loss` has no ratio or
   clipping. If you add multiple updates per batch, store sampling logprobs and add PPO clipping.
+- **With `--vllm`, sampling is very slightly off-policy:** vLLM and HF compute probabilities with
+  slightly different numerics. This is accepted at our scale. If it ever matters, store vLLM's
+  sampling logprobs and add an importance-ratio correction.
 - **Only the final step's reward counts.** An episode that hits `max_turns` gets reward 0.
 - **Verifiers never execute model output as code** unless sandboxed (see `evaluate` in countdown).
 - `rollout.py` and `env.py` must not import torch, so the tests run on a laptop.
@@ -85,7 +107,12 @@ environments with verifiable rewards (GRPO + LoRA). Goals, in order:
   LoRA r=32, lr=1e-4, 100 steps (~10 min A10G): held-out (256 tasks, sampled) 2.7% → 33.6%.
   Gain came by step 25 and then plateaued; mostly learning the `<answer>` format, not better math.
   Original difficulty (4 numbers, 1–25) was too hard: baseline 0.4%, no learning signal.
-- **Next:** greedy eval + separate format/solve metrics; get math to improve past the plateau.
+- **M1 (in progress, branch `v0.2`):** greedy eval with format/solve scores, `--thinking`, `--vllm`
+  (4–5× faster), best-checkpoint saving, `--init-adapter`, `CountdownHard`, `push` to the HF Hub.
+  Best result: thinking + vLLM, easy Countdown 10.5% → 97.7% held-out at step 40
+  (`/ckpt/countdown-think-vllm-100/best` on the Modal volume). Capability evals done:
+  hard Countdown 4.7% → 81.2%, GSM8K 52.9% → 54.6% (preserved). Next: upload to
+  `crucible-rl/Qwen3-0.6B-Countdown-GRPO`, then RL on the GSM8K train split.
 - M1: held-out eval script (baseline vs trained), vLLM for faster rollouts
 - M2: Docker sandboxed code-fix env with an out-of-sandbox verifier
 - M3: `crl` CLI, trajectory replay

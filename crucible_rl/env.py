@@ -18,6 +18,11 @@ class Env:
         """Return one task. The env decides what a task looks like."""
         raise NotImplementedError
 
+    @classmethod
+    def held_out(cls, n: int) -> list:
+        """Fixed benchmark tasks, never trained on. Dataset envs override this with their test split."""
+        return [cls.sample_task(random.Random(10_000 + i)) for i in range(n)]
+
     async def reset(self, task) -> str:
         """Start an episode, return the first prompt."""
         raise NotImplementedError

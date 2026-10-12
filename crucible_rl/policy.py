@@ -67,3 +67,30 @@ def cut_at_eos(seq, eos, pad):
         if t == pad:
             return seq[:i]
     return seq
+
+
+class VLLMPolicy(Policy):
+    """Same interface, but vLLM samples the tokens: several times faster for long answers.
+
+    The HF model still trains. After each optimizer step, sync() saves the LoRA adapter and
+    vLLM loads it under a new id, so rollouts always come from the current policy.
+    """
+    def __init__(self, model_name, tokenizer, lora_rank, **kw):
+        from vllm import LLM
+        super().__init__(None, tokenizer, **kw)
+        self.llm = LLM(model_name, enable_lora=True, max_lora_rank=lora_rank, gpu_memory_utilization=0.35,
+                       dtype="bfloat16", enable_prefix_caching=True)  # the rest of the GPU is for training
+        self.lora = None
+
+    def sync(self, net, path="/tmp/crucible_lora"):
+        from vllm.lora.request import LoRARequest
+        net.save_pretrained(path)
+        version = self.lora.lora_int_id + 1 if self.lora else 1
+        self.lora = LoRARequest(f"v{version}", version, path)
+
+    def _generate_batch(self, prompts):  # no chunking: vLLM manages its own memory
+        from vllm import SamplingParams, TokensPrompt
+        params = SamplingParams(temperature=0 if self.greedy else self.temperature, max_tokens=self.max_new_tokens)
+        outs = self.llm.generate([TokensPrompt(prompt_token_ids=p) for p in prompts], params,
+                                 lora_request=self.lora, use_tqdm=False)
+        return [cut_at_eos(list(o.outputs[0].token_ids), self.tok.eos_token_id, self.tok.pad_token_id) for o in outs]

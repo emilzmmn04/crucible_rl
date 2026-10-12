@@ -58,3 +58,7 @@ class Countdown(Env):
         answers = re.findall(r"<answer>(.*?)</answer>", action, re.S)  # the last one is final
         reward, feedback = score(answers[-1], **self.task) if answers else (0.0, "Missing <answer> tags.")
         return Step(observation=feedback + " Try again.", reward=reward, done=reward == 1.0)
+
+
+class CountdownHard(Countdown):
+    n_numbers, max_number = 4, 25  # the original difficulty: base Qwen3-0.6B solves 0.4%
