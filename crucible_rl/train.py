@@ -35,7 +35,7 @@ def main(env="envs.countdown:Countdown", model="Qwen/Qwen3-0.6B", steps=200, tas
         policy.sync(net)
     else:
         policy = Policy(net, tok, max_new_tokens, thinking=thinking)
-    held_out = [Env.sample_task(random.Random(10_000 + i)) for i in range(eval_tasks)]  # fixed benchmark
+    held_out = Env.held_out(eval_tasks)  # fixed benchmark
 
     def evaluate(step):
         net.eval()

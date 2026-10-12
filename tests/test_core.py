@@ -38,3 +38,12 @@ def test_last_answer_counts():
     asyncio.run(env.reset({"numbers": [2, 3, 4], "target": 14}))
     step = asyncio.run(env.step("<think>maybe <answer>2+3</answer>?</think> <answer>2+3*4</answer>"))
     assert step.reward == 1.0
+
+
+def test_gsm8k_answer_parsing():
+    from envs.gsm8k import GSM8K, number
+    assert number("$1,234.50.") == 1234.5 and number("no digits") is None
+    env = GSM8K()
+    asyncio.run(env.reset({"question": "q", "answer": 18.0}))
+    assert asyncio.run(env.step("<think>maybe <answer>9</answer></think><answer>$18</answer>")).reward == 1.0
+    assert asyncio.run(env.step("18")).reward == 0.0  # no tags, no reward
