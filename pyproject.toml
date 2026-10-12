@@ -1,6 +1,6 @@
 [project]
 name = "crucible_rl"
-version = "0.2.0.dev0"
+version = "0.2.0"
 requires-python = ">=3.11"
 dependencies = []
 
