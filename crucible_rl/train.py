@@ -8,7 +8,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import LoraConfig, get_peft_model
 
 from . import grpo
-from .policy import Policy
+from .policy import Policy, VLLMPolicy
 from .rollout import rollout_groups
 
 
@@ -18,7 +18,7 @@ def load_env(spec: str):
 
 
 def main(env="envs.countdown:Countdown", model="Qwen/Qwen3-0.6B", steps=200, tasks_per_step=8,
-         group_size=8, lr=1e-4, lora_rank=32, max_new_tokens=256, thinking=False, seed=0, eval_every=25, eval_tasks=256,
+         group_size=8, lr=1e-4, lora_rank=32, max_new_tokens=256, thinking=False, vllm=False, seed=0, eval_every=25, eval_tasks=256,
          out="checkpoints/run"):
     Env, rng = load_env(env), random.Random(seed)
     tok = AutoTokenizer.from_pretrained(model)
@@ -27,7 +27,11 @@ def main(env="envs.countdown:Countdown", model="Qwen/Qwen3-0.6B", steps=200, tas
     net.gradient_checkpointing_enable()
     net.enable_input_require_grads()
     opt = torch.optim.AdamW([p for p in net.parameters() if p.requires_grad], lr=lr)
-    policy = Policy(net, tok, max_new_tokens, thinking=thinking)
+    if vllm:  # fast sampling; the HF model below is only used for the gradient
+        policy = VLLMPolicy(model, tok, lora_rank, max_new_tokens=max_new_tokens, thinking=thinking)
+        policy.sync(net)
+    else:
+        policy = Policy(net, tok, max_new_tokens, thinking=thinking)
     held_out = [Env.sample_task(random.Random(10_000 + i)) for i in range(eval_tasks)]  # fixed benchmark
 
     def evaluate(step):
@@ -59,6 +63,8 @@ def main(env="envs.countdown:Countdown", model="Qwen/Qwen3-0.6B", steps=200, tas
                 (grpo.loss(net, t.tokens, t.mask, a) / len(trajs)).backward()
         torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
         opt.step()
+        if vllm:
+            policy.sync(net)
 
         rewards = [t.reward for t in trajs]
         print(f"step {step:4d}  reward {sum(rewards) / len(rewards):.3f}  "

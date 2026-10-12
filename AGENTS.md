@@ -34,7 +34,7 @@ environments with verifiable rewards (GRPO + LoRA). Goals, in order:
 |---|---|
 | `crucible_rl/env.py` | `Env` contract: `sample_task(rng)`, `async reset(task) -> str`, `async step(text) -> Step` |
 | `crucible_rl/rollout.py` | Runs episodes. `Trajectory` = flat `tokens` + `mask` (1 = model-generated) + `reward` |
-| `crucible_rl/policy.py` | HF model with async `generate()`; concurrent requests are batched into one GPU call |
+| `crucible_rl/policy.py` | HF model with async `generate()`; concurrent requests are batched into one GPU call. `VLLMPolicy` (`--vllm`) samples with vLLM on the same GPU, about 4–5× faster; the LoRA adapter is synced after each step |
 | `crucible_rl/grpo.py` | `advantages()` (group-normalized) and `loss()` (masked policy gradient) |
 | `crucible_rl/train.py` | Loop: sample tasks → rollout groups → advantages → one optimizer step. CLI flags = `main()` kwargs |
 | `envs/countdown.py` | Example env: arithmetic target, 2 turns, safe AST evaluation for the reward |
@@ -68,6 +68,9 @@ environments with verifiable rewards (GRPO + LoRA). Goals, in order:
   with mask 0, and generated ids with mask 1.
 - **On-policy, one gradient step per batch.** This is why `grpo.loss` has no ratio or
   clipping. If you add multiple updates per batch, store sampling logprobs and add PPO clipping.
+- **With `--vllm`, sampling is very slightly off-policy:** vLLM and HF compute probabilities with
+  slightly different numerics. This is accepted at our scale. If it ever matters, store vLLM's
+  sampling logprobs and add an importance-ratio correction.
 - **Only the final step's reward counts.** An episode that hits `max_turns` gets reward 0.
 - **Verifiers never execute model output as code** unless sandboxed (see `evaluate` in countdown).
 - `rollout.py` and `env.py` must not import torch, so the tests run on a laptop.

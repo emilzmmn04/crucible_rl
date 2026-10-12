@@ -5,8 +5,9 @@
 import modal
 
 image = (modal.Image.debian_slim(python_version="3.12")
-         .pip_install("torch", "transformers", "peft", "accelerate")
-         .env({"PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"})  # avoid fragmentation OOMs
+         .pip_install("vllm", "peft", "accelerate")  # vllm pins compatible torch + transformers
+         .env({"PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",  # avoid fragmentation OOMs
+               "VLLM_USE_FLASHINFER_SAMPLER": "0"})  # its sampler JIT-compiles and needs nvcc
          .add_local_python_source("crucible_rl", "envs"))
 volume = modal.Volume.from_name("crucible-rl-checkpoints", create_if_missing=True)
 app = modal.App("crucible-rl", image=image)
@@ -21,6 +22,7 @@ def train(**kwargs):
 
 @app.local_entrypoint()
 def run(model: str = "Qwen/Qwen3-0.6B", env: str = "envs.countdown:Countdown", steps: int = 200,
-        thinking: bool = False, max_new_tokens: int = 256, eval_every: int = 25, eval_tasks: int = 256):
+        thinking: bool = False, max_new_tokens: int = 256, eval_every: int = 25, eval_tasks: int = 256,
+        vllm: bool = False):
     train.remote(model=model, env=env, steps=steps, thinking=thinking, max_new_tokens=max_new_tokens,
-                 eval_every=eval_every, eval_tasks=eval_tasks)
+                 eval_every=eval_every, eval_tasks=eval_tasks, vllm=vllm)
